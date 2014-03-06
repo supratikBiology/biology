@@ -1,10 +1,26 @@
 #include <stdio.h>
 #include <string.h>
 
+/* enumerated file sources */
+/*#define active 1
+#define decoy 2
+#define crystal 3
+
+*/
 /****************************************************************************************/
+
+
+enum eFileSources
+{
+	active=1, decoy=2, crystal=3
+};
+
+
+//typedef int enum eFileSources;
 
 typedef struct
 {
+	enum eFileSources fSource;
 	int id, subst_id, statusBit;
 	char name[10], typeOfAtom[10], subst_name[10];
 	float x, y, z, charge;
@@ -12,27 +28,29 @@ typedef struct
 
 typedef struct
 {
+	enum eFileSources fSource;
 	int id, originAtomID, targetAtomID, typeOfBond, statusBit;
 } bondType;
 
 typedef struct
 {
+	enum eFileSources fSource;
 	int numAtoms, numBonds, numSubStructs, numFeatures, numSets, typeOfMolecule, chargeType, statusBits;
 	char name[50], comments[100];
 } moleculeType;
 
 /****************************************************************************************/
 
-void Atom_set_values(atomType *a, int id_p, char name_p[], float x_p, float y_p, float z_p, char atomType_p[], int subst_id_p, char subst_name_p[], float charge_p, char statusBit_p[]);
-void Bond_set_values(bondType *b, int id_p, int originAtom_p, int targetAtom_p, char bondType_p[],  char statusBit_p[]);
-int getAtoms(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules);
-int getBonds(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules);
-int getMolecules(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules);
-void Molecule_set_values(moleculeType *m, char name_p[], int numAtoms_p, int numBonds_p, int numSubStructs_p, int numFeatures_p, int numSets_p, char moleculeType_p[], char chargeType_p[], char statusBit_p[], char comments_p[]);
-int parseAtom(atomType *a, char buffer[]);
-int parseBond(bondType *b, char buffer[]);
-int parseMolecule(moleculeType *m, char moleculeName[], char moleculeStats[], char typeOfMolecule[], char moleculeCharge[], char moleculeStatusBits[], char comments[]);
-void readFile(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules);
+void Atom_set_values(atomType *a, int id_p, char name_p[], float x_p, float y_p, float z_p, char atomType_p[], int subst_id_p, char subst_name_p[], float charge_p, char statusBit_p[], enum eFileSources fSource);
+void Bond_set_values(bondType *b, int id_p, int originAtom_p, int targetAtom_p, char bondType_p[],  char statusBit_p[], enum eFileSources fSource);
+int getAtoms(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource);
+int getBonds(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource);
+int getMolecules(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource);
+void Molecule_set_values(moleculeType *m, char name_p[], int numAtoms_p, int numBonds_p, int numSubStructs_p, int numFeatures_p, int numSets_p, char moleculeType_p[], char chargeType_p[], char statusBit_p[], char comments_p[], enum eFileSources fSource);
+int parseAtom(atomType *a, char buffer[], enum eFileSources fSource);
+int parseBond(bondType *b, char buffer[], enum eFileSources fSource);
+int parseMolecule(moleculeType *m, char moleculeName[], char moleculeStats[], char typeOfMolecule[], char moleculeCharge[], char moleculeStatusBits[], char comments[], enum eFileSources fSource);
+void readFile(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource);
 int showFile(FILE *f, int x);
 
 /****************************************************************************************/
@@ -41,6 +59,7 @@ int main(void)
 {
 	FILE *fileNames;
 	FILE *currentFile;
+	enum eFileSources fSource;
 	char buffer[500], nameOfFile[20];
 	int numberOfAtoms = 0, numberOfBonds = 0, numberOfMolecules = 0;
 
@@ -52,12 +71,26 @@ int main(void)
 	while(!feof(fileNames))
 	{
 		printf("%s\n", nameOfFile);
+
+		/* document filesource name */
+		switch(nameOfFile[0])
+		{
+			case 'c' :
+				fSource = crystal;
+				break;
+			case 'a' :
+				fSource = active;
+				break;
+			case 'd' :
+				fSource = decoy;
+				break;
+		}
 		
 		/* open file */
 		currentFile = fopen(nameOfFile, "r");
 
 		/* read file */
-		readFile(currentFile, &numberOfAtoms, &numberOfBonds, &numberOfMolecules);
+		readFile(currentFile, &numberOfAtoms, &numberOfBonds, &numberOfMolecules, fSource);
 
 		fscanf(fileNames, " %[^\n]", nameOfFile);
 	}
@@ -95,7 +128,7 @@ int showFile(FILE *f, int x)
 
 /****************************************************************************************/
 
-void Atom_set_values(atomType *a, int id_p, char name_p[], float x_p, float y_p, float z_p, char atomType_p[], int subst_id_p, char subst_name_p[], float charge_p, char statusBit_p[])
+void Atom_set_values(atomType *a, int id_p, char name_p[], float x_p, float y_p, float z_p, char atomType_p[], int subst_id_p, char subst_name_p[], float charge_p, char statusBit_p[], enum eFileSources fSource)
 {
 	/* set literal values */
 	a->id = id_p;
@@ -107,6 +140,7 @@ void Atom_set_values(atomType *a, int id_p, char name_p[], float x_p, float y_p,
 	a->subst_id = subst_id_p;
 	strcpy(a->subst_name, subst_name_p);
 	a->charge = charge_p;
+	a->fSource = fSource;
 	
 	/* Because the statusBit is a string with only 8 possible values, I'll store it as an integer */
 	a->statusBit = -1;	/* the default value, if the status bit is unassigned */
@@ -130,12 +164,13 @@ void Atom_set_values(atomType *a, int id_p, char name_p[], float x_p, float y_p,
 
 /****************************************************************************************/
 
-void Bond_set_values(bondType *b, int id_p, int originAtom_p, int targetAtom_p, char bondType_p[],  char statusBit_p[])
+void Bond_set_values(bondType *b, int id_p, int originAtom_p, int targetAtom_p, char bondType_p[],  char statusBit_p[], enum eFileSources fSource)
 {
 	/* set literal values */
 	b->id = id_p;
 	b->originAtomID = originAtom_p;
 	b->targetAtomID = targetAtom_p;
+	b->fSource = fSource;
 	
 	/* Because the bondType is a string with only 8 possible values, I'll store it as an integer */
 	if(strcmp(bondType_p, "1") == 0)
@@ -175,7 +210,7 @@ void Bond_set_values(bondType *b, int id_p, int originAtom_p, int targetAtom_p, 
 
 /****************************************************************************************/
 
-int getAtoms(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules)
+int getAtoms(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource)
 {
 	/*
 		Input: An open file that is currently in an atom section
@@ -194,14 +229,14 @@ int getAtoms(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolec
 		(*numberOfAtoms)++;
 
 		/* parse atom */
-		parseAtom(&a, buffer);
+		parseAtom(&a, buffer, fSource);
 
 		/* spot checking atoms */
 		if((*numberOfAtoms) % 10000 == 0)
 		{ /* every 10,000 atoms will be displayed */
 
-			printf("Atom:\tid=%d name=%s\tcoord=(%.3f,%.3f,%.3f)\ttype=%s\tsubstID=%d substName=%s \tcharge=%.3f \tstatusBit=%d\n",
-				a.id, a.name, a.x, a.y, a.z, a.typeOfAtom, a.subst_id, a.subst_name, a.charge, a.statusBit);
+			printf("Atom:\tid=%d name=%s\tcoord=(%.3f,%.3f,%.3f)\ttype=%s\tsubstID=%d substName=%s \tcharge=%.3f \tstatusBit=%d\tSource=%d\n",
+				a.id, a.name, a.x, a.y, a.z, a.typeOfAtom, a.subst_id, a.subst_name, a.charge, a.statusBit, a.fSource);
 
 		} /* every 10,000 atoms will be displayed */
 
@@ -235,7 +270,7 @@ int getAtoms(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolec
 
 /****************************************************************************************/
 
-int getBonds(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules)
+int getBonds(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource)
 {
 	/*
 		Input: An open file that is currently in a bond section
@@ -254,15 +289,15 @@ int getBonds(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolec
 		(*numberOfBonds)++;
 
 		/* parse bond */
-		parseBond(&b, buffer);
+		parseBond(&b, buffer, fSource);
 
 
 		/* spot checking bonds */
 		if((*numberOfBonds) % 10000 == 0)
 		{ /* every 10,000 bonds will be displayed */
 
-			printf("Bond:\tid=%d originID=%d targetID=%d bondTypeID=%d statusBitID=%d\n",
-				b.id, b.originAtomID, b.targetAtomID, b.typeOfBond, b.statusBit);
+			printf("Bond:\tid=%d originID=%d targetID=%d bondTypeID=%d statusBitID=%d\tsource=%d\n",
+				b.id, b.originAtomID, b.targetAtomID, b.typeOfBond, b.statusBit, b.fSource);
 
 		} /* every 10,000 bonds will be displayed */
 
@@ -295,7 +330,7 @@ int getBonds(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolec
 
 /****************************************************************************************/
 
-int getMolecules(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules)
+int getMolecules(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource)
 {
 	/*
 		Input: An open file that is currently in a molecule section
@@ -350,15 +385,15 @@ int getMolecules(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfM
 	(*numberOfMolecules)++;
 
 	/* parse molecule */
-	parseMolecule(&m, moleculeName, moleculeStats, typeOfMolecule, moleculeCharge, moleculeStatusBits, comments);
+	parseMolecule(&m, moleculeName, moleculeStats, typeOfMolecule, moleculeCharge, moleculeStatusBits, comments, fSource);
 
 
 	/* spot checking molecules */
 	if((*numberOfBonds) % 1000 == 0)
 	{ /* every 1,000 bonds will be displayed */
 
-		printf("Molecule:\tname=%s numOfAtoms=%d numOfBonds=%d numOfSubst=%d numOfFeat=%d numOfSets=%d molTypeId=%d chargeTypeId=%d statusBitId=%d comment=%s\n",
-			m.name, m.numAtoms, m.numBonds, m.numSubStructs, m.numFeatures, m.numSets, m.typeOfMolecule, m.chargeType, m.statusBits, m.comments);
+		printf("Molecule:\tname=%s numOfAtoms=%d numOfBonds=%d numOfSubst=%d numOfFeat=%d numOfSets=%d molTypeId=%d chargeTypeId=%d statusBitId=%d comment=%s\tSourse=%d\n",
+			m.name, m.numAtoms, m.numBonds, m.numSubStructs, m.numFeatures, m.numSets, m.typeOfMolecule, m.chargeType, m.statusBits, m.comments, m.fSource);
 
 	} /* every 10,000 bonds will be displayed */
 
@@ -391,7 +426,7 @@ int getMolecules(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfM
 
 /****************************************************************************************/
 
-void Molecule_set_values(moleculeType *m, char name_p[], int numAtoms_p, int numBonds_p, int numSubStructs_p, int numFeatures_p, int numSets_p, char moleculeType_p[], char chargeType_p[], char statusBit_p[], char comments_p[])
+void Molecule_set_values(moleculeType *m, char name_p[], int numAtoms_p, int numBonds_p, int numSubStructs_p, int numFeatures_p, int numSets_p, char moleculeType_p[], char chargeType_p[], char statusBit_p[], char comments_p[], enum eFileSources fSource)
 {
 	/* set literal values */
 	strcpy(m->name, name_p);
@@ -401,6 +436,7 @@ void Molecule_set_values(moleculeType *m, char name_p[], int numAtoms_p, int num
 	m->numFeatures = numFeatures_p;
 	m->numSets = numSets_p;
 	strcpy(m->comments, comments_p);
+	m->fSource = fSource;
 
 	/* Because the moleculeType is a string with only 5 possible values, I'll store it as an integer */
 	m->typeOfMolecule = -1; /* default value, if the moleculeType is unassigned */
@@ -461,7 +497,7 @@ void Molecule_set_values(moleculeType *m, char name_p[], int numAtoms_p, int num
 
 /****************************************************************************************/
 
-int parseAtom(atomType *a, char buffer[])
+int parseAtom(atomType *a, char buffer[], enum eFileSources fSource)
 {
 	/*
 		Input: line from file 
@@ -592,13 +628,13 @@ int parseAtom(atomType *a, char buffer[])
 	} /* if not end of line */
 
 	/* set atom values */
-	Atom_set_values(a, id, name, x, y, z, typeOfAtom, subst_id, subst_name, charge, statusBit);
+	Atom_set_values(a, id, name, x, y, z, typeOfAtom, subst_id, subst_name, charge, statusBit, fSource);
 
 } /* parseAtom */
 
 /****************************************************************************************/
 
-int parseBond(bondType *b, char buffer[])
+int parseBond(bondType *b, char buffer[], enum eFileSources fSource)
 {
 	/* 
 		Input: line from file
@@ -678,13 +714,13 @@ int parseBond(bondType *b, char buffer[])
 	} /* if not end of line */
 	
 	/* set bond values */
-	Bond_set_values(b, id, originAtom, targetAtom, bondType, statusBit);
+	Bond_set_values(b, id, originAtom, targetAtom, bondType, statusBit, fSource);
 
 } /* parseBond */
 
 /****************************************************************************************/
 
-int parseMolecule(moleculeType *m, char moleculeName[], char moleculeStats[], char typeOfMolecule[], char moleculeCharge[], char moleculeStatusBits[], char comments[])
+int parseMolecule(moleculeType *m, char moleculeName[], char moleculeStats[], char typeOfMolecule[], char moleculeCharge[], char moleculeStatusBits[], char comments[], enum eFileSources fSource)
 {
 	/*
 		Input: line from file, and open file that is currently in a molecule section
@@ -777,13 +813,13 @@ int parseMolecule(moleculeType *m, char moleculeName[], char moleculeStats[], ch
 	} /* if not end of line */
 
 	/* set molecule values */
-	Molecule_set_values(m, moleculeName, numAtoms_p, numBonds_p, numSubStructs_p, numFeatures_p, numSets_p, typeOfMolecule, moleculeCharge, moleculeStatusBits, comments);
+	Molecule_set_values(m, moleculeName, numAtoms_p, numBonds_p, numSubStructs_p, numFeatures_p, numSets_p, typeOfMolecule, moleculeCharge, moleculeStatusBits, comments, fSource);
 
 } /* parseMolecule */
 
 /****************************************************************************************/
 
-void readFile(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules)
+void readFile(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMolecules, enum eFileSources fSource)
 {
 	/*
 		Input: An open file with the pointer at the beginning
@@ -807,15 +843,15 @@ void readFile(FILE *f, int *numberOfAtoms, int *numberOfBonds, int *numberOfMole
 
 		/* if file is in atom section, then get atoms */
 		if(sectionFlag == 1)
-			sectionFlag = getAtoms(f, numberOfAtoms, numberOfBonds, numberOfMolecules);
+			sectionFlag = getAtoms(f, numberOfAtoms, numberOfBonds, numberOfMolecules, fSource);
 
 		/* if file is in bonds section, then get bonds */
 		else if(sectionFlag == 2)
-			sectionFlag = getBonds(f, numberOfAtoms, numberOfBonds, numberOfMolecules);
+			sectionFlag = getBonds(f, numberOfAtoms, numberOfBonds, numberOfMolecules, fSource);
 
 		/* if file is in molecules section, then get molecules */
 		else if(sectionFlag == 3)
-			sectionFlag = getMolecules(f, numberOfAtoms, numberOfBonds, numberOfMolecules);
+			sectionFlag = getMolecules(f, numberOfAtoms, numberOfBonds, numberOfMolecules, fSource);
 
 	} /* while not eof */
 
