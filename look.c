@@ -1,22 +1,12 @@
 #include <stdio.h>
 #include <string.h>
 
-/* enumerated file sources */
-/*#define active 1
-#define decoy 2
-#define crystal 3
-
-*/
 /****************************************************************************************/
-
 
 enum eFileSources
 {
 	active=1, decoy=2, crystal=3
 };
-
-
-//typedef int enum eFileSources;
 
 typedef struct
 {
